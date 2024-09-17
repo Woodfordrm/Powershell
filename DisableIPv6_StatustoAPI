@@ -1,0 +1,54 @@
+# Path to the text file that contains the list of computer names
+$listFilePath = "C:\path\to\machine_list.txt"
+
+# API endpoint for sending the status
+$apiEndpoint = "http://your-api-endpoint/submit-status"
+
+# Read the list of computers from the file
+$computerList = Get-Content -Path $listFilePath
+
+# Loop through each computer in the list
+foreach ($computer in $computerList) {
+    try {
+        # Enter a PowerShell session on the remote machine
+        Enter-PSSession -ComputerName $computer
+        
+        # Disable IPv6 on all network adapters
+        Get-NetAdapterBinding -ComponentID ms_tcpip6 | Disable-NetAdapterBinding -ComponentID ms_tcpip6
+
+        # Wait for the changes to take effect
+        Start-Sleep -Seconds 2
+
+        # Verify IPv6 is disabled and get the adapter status
+        $adapterStatus = Get-NetAdapterBinding -ComponentID ms_tcpip6 | Select-Object -Property Name, Enabled
+
+        # Get the machine name
+        $machineName = $env:COMPUTERNAME
+
+        # Prepare the data for JSON conversion
+        $data = @{
+            MachineName = $machineName
+            AdapterStatus = $adapterStatus | ForEach-Object {
+                @{
+                    AdapterName = $_.Name
+                    IPv6Enabled = $_.Enabled
+                }
+            }
+        }
+
+        # Convert the data to JSON
+        $jsonData = $data | ConvertTo-Json -Depth 3
+
+        # Send the data to the API endpoint
+        $response = Invoke-RestMethod -Uri $apiEndpoint -Method Post -Body $jsonData -ContentType "application/json"
+
+        # Output the API response
+        Write-Host "Successfully sent IPv6 status for $computer. Response: $($response | Out-String)"
+        
+        # Exit the remote session
+        Exit-PSSession
+    } catch {
+        # Handle errors for machines that cannot be reached or have issues
+        Write-Host "Failed to process $computer: $_"
+    }
+}
