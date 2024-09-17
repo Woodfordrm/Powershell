@@ -1,0 +1,34 @@
+# Disable IPv6 on all network adapters
+Get-NetAdapterBinding -ComponentID ms_tcpip6 | Disable-NetAdapterBinding -ComponentID ms_tcpip6
+
+# Wait for the changes to take effect
+Start-Sleep -Seconds 2
+
+# Verify that IPv6 is disabled
+$adapterStatus = Get-NetAdapterBinding -ComponentID ms_tcpip6 | Select-Object -Property Name, Enabled
+
+# Get the machine name
+$machineName = $env:COMPUTERNAME
+
+# Prepare the data for JSON conversion
+$data = @{
+    MachineName = $machineName
+    AdapterStatus = $adapterStatus | ForEach-Object {
+        @{
+            AdapterName = $_.Name
+            IPv6Enabled = $_.Enabled
+        }
+    }
+}
+
+# Convert the data to JSON
+$jsonData = $data | ConvertTo-Json -Depth 3
+
+# Define the API endpoint
+$apiEndpoint = "https://Servername.git/IPV6Status"
+
+# Send the data to the API using Invoke-RestMethod
+$response = Invoke-RestMethod -Uri $apiEndpoint -Method Post -Body $jsonData -ContentType "application/json"
+
+# Output the API response
+$response
